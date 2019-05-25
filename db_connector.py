@@ -1,8 +1,6 @@
 import json
 import pymysql
 
-from models import User
-
 
 def _our_hash(password):
     d = {
@@ -14,25 +12,40 @@ def _our_hash(password):
 
 
 class OxwallDB:
-    def __init__(self):
-        self.connection = pymysql.connect(host='localhost',
-                             user='root',
-                             password='mysql',
-                             db='oxwa166',
-                             charset='utf8mb4',
-                             cursorclass=pymysql.cursors.DictCursor)
+    def __init__(self, configs):
+        self.connection = pymysql.connect(
+            **configs,
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        self.connection.autocommit = True
 
     def close(self):
         self.connection.close()
 
+    def get_users(self):
+        with self.connection.cursor() as cursor:
+            # Read a single record
+            sql = "SELECT * FROM `ow_base_user`"
+            cursor.execute(sql)
+            result = cursor.fetchall()
+        self.connection.commit()
+        return result
+
     def create_user(self, user):
         with self.connection.cursor() as cursor:
-            # Create a new user
+            # Read a single record
             sql = f"""INSERT `ow_base_user` (`username`, `email`, `password`, `joinIp`)
                       VALUES ("{user.username}", "{user.email}", "{_our_hash(user.password)}", "21423532")"""
             cursor.execute(sql)
-        # connection is not autocommit by default. So you must commit to save
-        # your changes.
+        self.connection.commit()
+        with self.connection.cursor() as cursor:
+            sql1 = f"SELECT * FROM ow_base_user WHERE ow_base_user.username = '{user.username}'"
+            cursor.execute(sql1)
+            userid = cursor.fetchone()['id']
+            sql = f"""INSERT `ow_base_question_data` (`userId`, `textValue`, `questionName`)
+                      VALUES ("{userid}", "{user.real_name}", "realname")"""
+            cursor.execute(sql)
         self.connection.commit()
 
     def delete_user(self, user):
@@ -41,17 +54,6 @@ class OxwallDB:
                       WHERE `ow_base_user`.`username` = "{user.username}"'''
             cursor.execute(sql)
         self.connection.commit()
-
-    def get_users(self):
-        """
-        :return: User objects with user data from DB
-        """
-        with self.connection.cursor() as cursor:
-            sql = "SELECT * FROM `ow_base_user`"
-            cursor.execute(sql)
-            result = cursor.fetchall()
-        self.connection.commit()
-        return [User(**u) for u in result]  # TODO explain!
 
     def get_last_text_status(self):
         """ Get status with maximum id that is last added """
